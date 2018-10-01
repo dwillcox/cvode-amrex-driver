@@ -11,9 +11,9 @@
 
 void main_main();
 
-void do_react_cpp(const int* lo, const int* hi,
-                  amrex::Real* state, const int* s_lo, const int* s_hi,
-                  const int ncomp, const amrex::Real dt);
+void do_react(const int* lo, const int* hi,
+              amrex::Real* state, const int* s_lo, const int* s_hi,
+              const int ncomp, const amrex::Real dt);
 
 static int fun_rhs(realtype t, N_Vector y, N_Vector ydot, void *user_data);
 
