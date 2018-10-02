@@ -1,5 +1,10 @@
 CEXE_sources += main.cpp
+
+#ifeq ($(USE_CUDA_CVODE), TRUE)
 CEXE_sources += react.cpp
+#else
+CEXE_sources += react.cpp
+#endif
 
 FEXE_headers = test_react_F.H
 CEXE_headers = test_react.H

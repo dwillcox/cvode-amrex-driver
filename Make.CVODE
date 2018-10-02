@@ -23,6 +23,8 @@ DEFINES += -DCRSEGRNDOMP
 # CVODE directories
 #------------------------------------------------------------------------------
 
+USE_CUDA_CVODE ?= FALSE
+
 INCLUDE_LOCATIONS += $(CVODE_HOME)/include
 
 LIBRARY_LOCATIONS += $(CVODE_HOME)/lib
