@@ -1,6 +1,6 @@
 # Using CVODE
 
-This example program shows how to use CVODE in an AMReX application.
+This example program shows how to use CVODE 4.0.0 in an AMReX application.
 
 To build the example, you should have the environment variable
 `AMREX_HOME` defined. You should also define the environment variable
