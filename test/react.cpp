@@ -1,10 +1,10 @@
-#include "cvode.h"                  /* prototypes for CVODE fcts., consts.      */
-#include "nvector_serial.h"         /* access to serial N_Vector                */
-#include "sunmatrix_dense.h"        /* access to dense SUNMatrix                */
-#include "sunlinsol_dense.h"        /* access to dense SUNLinearSolver          */
-#include "cvode_direct.h"           /* access to CVDls interface                */
-#include "sundials_types.h"         /* definition of realtype                   */
-#include "sundials_math.h"          /* contains the macros ABS, SUNSQR, and EXP */
+#include "cvode/cvode.h"                  /* prototypes for CVODE fcts., consts.      */
+#include "nvector/nvector_serial.h"         /* access to serial N_Vector                */
+#include "sunmatrix/sunmatrix_dense.h"        /* access to dense SUNMatrix                */
+#include "sunlinsol/sunlinsol_dense.h"        /* access to dense SUNLinearSolver          */
+#include "cvode/cvode_direct.h"           /* access to CVDls interface                */
+#include "sundials/sundials_types.h"         /* definition of realtype                   */
+#include "sundials/sundials_math.h"          /* contains the macros ABS, SUNSQR, and EXP */
 #include <AMReX_MultiFab.H>
 #include "test_react.H"
 #include "test_react_F.H"
@@ -43,7 +43,7 @@ void do_react(const int* lo, const int* hi,
           get_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &NV_Ith_S(y, n-1));
         }
         
-        cvode_mem = CVodeCreate(CV_BDF, CV_NEWTON);
+        cvode_mem = CVodeCreate(CV_BDF);
         flag = CVodeInit(cvode_mem, fun_rhs, time, y);
         flag = CVodeSVtolerances(cvode_mem, reltol, abstol);
         

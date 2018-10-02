@@ -23,11 +23,10 @@ DEFINES += -DCRSEGRNDOMP
 # CVODE directories
 #------------------------------------------------------------------------------
 
-Bdirs := CVODE
+INCLUDE_LOCATIONS += $(CVODE_HOME)/include
 
-Bpack += $(foreach dir, $(Bdirs), $(TOP)/$(dir)/Make.package)
-Blocs += $(foreach dir, $(Bdirs), $(TOP)/$(dir))
-
+LIBRARY_LOCATIONS += $(CVODE_HOME)/lib
+LIBRARIES += -lsundials_cvode -lsundials_sunlinsolband -lsundials_sunlinsolspbcgs -lsundials_sunlinsolsptfqmr -lsundials_sunmatrixsparse -lsundials_nveccuda -lsundials_sunlinsoldense -lsundials_sunlinsolspfgmr -lsundials_sunmatrixband -lsundials_sunnonlinsolfixedpoint -lsundials_nvecserial -lsundials_sunlinsolpcg -lsundials_sunlinsolspgmr -lsundials_sunmatrixdense -lsundials_sunnonlinsolnewton
 
 #------------------------------------------------------------------------------
 # AMReX
@@ -77,7 +76,7 @@ VPATH_LOCATIONS   += $(Blocs)
 # runtime parameter support for extern/ routines
 F90EXE_sources += extern.F90
 
-EXTERN_TEMPLATE := $(CVODE_HOME)/test/extern_probin.template
+EXTERN_TEMPLATE := extern_probin.template
 
 # these are for finding runtime parameters
 EXTERN_SEARCH += $(EXTERN_CORE)

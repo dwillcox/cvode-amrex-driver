@@ -14,11 +14,11 @@ EBASE = main
 
 EXTERN_SEARCH += .
 
-CVODE_HOME = ../.
+CVODE_HOME ?= ../CVODE
 
 Bpack   := ./Make.package
 Blocs   := .
 
-include $(CVODE_HOME)/Make.CVODE
+include ../Make.CVODE
 
 

@@ -1,13 +1,13 @@
 #ifndef TEST_REACT_H
 #define TEST_REACT_H
 
-#include "cvode.h"                  /* prototypes for CVODE fcts., consts.      */
-#include "nvector_serial.h"         /* access to serial N_Vector                */
-#include "sunmatrix_dense.h"        /* access to dense SUNMatrix                */
-#include "sunlinsol_dense.h"        /* access to dense SUNLinearSolver          */
-#include "cvode_direct.h"           /* access to CVDls interface                */
-#include "sundials_types.h"         /* definition of realtype                   */
-#include "sundials_math.h"          /* contains the macros ABS, SUNSQR, and EXP */
+#include "cvode/cvode.h"                  /* prototypes for CVODE fcts., consts.      */
+#include "nvector/nvector_serial.h"         /* access to serial N_Vector                */
+#include "sunmatrix/sunmatrix_dense.h"        /* access to dense SUNMatrix                */
+#include "sunlinsol/sunlinsol_dense.h"        /* access to dense SUNLinearSolver          */
+#include "cvode/cvode_direct.h"           /* access to CVDls interface                */
+#include "sundials/sundials_types.h"         /* definition of realtype                   */
+#include "sundials/sundials_math.h"          /* contains the macros ABS, SUNSQR, and EXP */
 
 void main_main();
 
