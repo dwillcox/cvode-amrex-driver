@@ -130,7 +130,7 @@ void main_main ()
     {
         const Box& bx = mfi.tilebox();
 
-        do_react(AMREX_INT_ANYD(bx.loVect()), AMREX_INT_ANYD(bx.hiVect()),
+        do_react(AMREX_ARLIM_3D(bx.loVect()), AMREX_ARLIM_3D(bx.hiVect()),
                  BL_TO_FORTRAN_ANYD(state[mfi]), Ncomp, dt);
 
     }
@@ -140,8 +140,6 @@ void main_main ()
     std::string integrator = "CVODE";
 
     // Write a plotfile
-    int n = 0;
-
     WriteSingleLevelPlotfile(prefix + name + integrator, state, varnames, geom, time, 0);
 
 

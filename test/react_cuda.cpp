@@ -1,8 +1,7 @@
 #include <cvode/cvode.h>                  /* prototypes for CVODE fcts., consts.      */
-#include <nvector/nvector_cuda.h>         /* access to CUDA N_Vector                */
-#include <sunmatrix/sunmatrix_dense.h>    /* access to dense SUNMatrix                */
-#include <sunlinsol/sunlinsol_dense.h>    /* access to dense SUNLinearSolver          */
-#include <cvode/cvode_direct.h>           /* access to CVDls interface                */
+#include <nvector/nvector_cuda.h>         /* access to CUDA N_Vector                  */
+#include <sunlinsol/sunlinsol_spgmr.h>    /* access to SPGMR SUNLinearSolver          */
+#include <cvode/cvode_spils.h>            /* access to CVSpils interface              */
 #include <sundials/sundials_types.h>      /* definition of realtype                   */
 #include <sundials/sundials_math.h>       /* contains the macros ABS, SUNSQR, and EXP */
 #include <AMReX_MultiFab.H>
@@ -30,7 +29,6 @@ void do_react(const int* lo, const int* hi,
 
         N_Vector y = NULL, yout=NULL;
         N_Vector abstol = NULL;
-        SUNMatrix Amat = NULL;
         SUNLinearSolver Linsol = NULL;
         void* cvode_mem = NULL;
         int flag;
@@ -53,13 +51,12 @@ void do_react(const int* lo, const int* hi,
         cvode_mem = CVodeCreate(CV_BDF);
         flag = CVodeInit(cvode_mem, fun_rhs, time, y);
         flag = CVodeSVtolerances(cvode_mem, reltol, abstol);
+        flag = CVodeSetMaxNumSteps(cvode_mem, 150000);	
 
         // Initialize Linear Solver
-        Amat   = SUNDenseMatrix(neqs, neqs);
-        Linsol = SUNDenseLinearSolver(y, Amat);
-        flag = CVDlsSetLinearSolver(cvode_mem, Linsol, Amat);
-        flag = CVDlsSetJacFn(cvode_mem, fun_jac);
-        flag = CVodeSetMaxNumSteps(cvode_mem, 150000);
+        Linsol = SUNSPGMR(y, PREC_NONE, 0);
+        flag = CVSpilsSetLinearSolver(cvode_mem, Linsol);
+	flag = CVSpilsSetJacTimes(cvode_mem, NULL, fun_jac_times_vec);
 
         // Do Integration
         time = time + static_cast<realtype>(dt);
@@ -67,8 +64,9 @@ void do_react(const int* lo, const int* hi,
         if (flag != CV_SUCCESS) amrex::Abort("Failed integration");
 
         // Save Final State
+        get_nvector_cuda(y, state_y, neqs);	
         for (int n=1; n<=neqs; n++) {
-          set_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &NV_Ith_S(yout, n-1));
+          set_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &state_y[n-1]);
         }
 
         // Free Memory
@@ -76,7 +74,6 @@ void do_react(const int* lo, const int* hi,
         N_VDestroy(yout);
         N_VDestroy(abstol);
         CVodeFree(&cvode_mem);
-        SUNMatDestroy(Amat);
         SUNLinSolFree(Linsol);
       }
     }
@@ -90,51 +87,56 @@ static void set_nvector_cuda(N_Vector vec, realtype* data, sunindextype size)
   for (sunindextype i = 0; i < size; i++) {
     vec_host_ptr[i] = data[i];
   }
-  N_VCopyToDevice_Cuda(vec_host_ptr);
+  N_VCopyToDevice_Cuda(vec);
+}
+
+
+static void get_nvector_cuda(N_Vector vec, realtype* data, sunindextype size)
+{
+  N_VCopyFromDevice_Cuda(vec);  
+  realtype* vec_host_ptr = N_VGetHostArrayPointer_Cuda(vec);
+  for (sunindextype i = 0; i < size; i++) {
+    data[i] = vec_host_ptr[i];
+  }
 }
 
 
 static int fun_rhs(realtype t, N_Vector y, N_Vector ydot, void *user_data)
-{  
-  fun_rhs_kernel<<<1,1>>>(t, y, ydot, user_data);
+{
+  realtype* ydot_d = N_VGetDeviceArrayPointer_Cuda(ydot);
+  realtype* y_d = N_VGetDeviceArrayPointer_Cuda(y);  
+  fun_rhs_kernel<<<1,1>>>(t, y_d, ydot_d, user_data);
   return 0;
 }
 
 
-__global__ void fun_rhs_kernel(realtype t, N_Vector y, N_Vector ydot, void *user_data)
+static int fun_jac_times_vec(N_Vector v, N_Vector Jv, realtype t,
+			     N_Vector y, N_Vector fy,
+			     void *user_data, N_Vector tmp)
 {
-  NV_Ith_S(ydot, 0) = -.04e0*NV_Ith_S(y, 0) + 1.e4*NV_Ith_S(y, 1)*NV_Ith_S(y, 2);
-  NV_Ith_S(ydot, 2) = 3.e7*NV_Ith_S(y, 1)*NV_Ith_S(y, 1);
-  NV_Ith_S(ydot, 1) = -NV_Ith_S(ydot, 0)-NV_Ith_S(ydot, 2);
-}
-
-
-static int fun_jac(realtype tn, N_Vector y, N_Vector fy, SUNMatrix J,
-                   void *user_data, N_Vector tmp1, N_Vector tmp2, N_Vector tmp3)
-{
-
-  fun_jac_kernel<<<1,1>>>(realtype tn, N_Vector y, N_Vector fy, SUNMatrix J,
-                          void *user_data, N_Vector tmp1, N_Vector tmp2, N_Vector tmp3);
+  realtype* v_d   = N_VGetDeviceArrayPointer_Cuda(v);
+  realtype* Jv_d  = N_VGetDeviceArrayPointer_Cuda(Jv);
+  realtype* y_d   = N_VGetDeviceArrayPointer_Cuda(y);
+  realtype* fy_d  = N_VGetDeviceArrayPointer_Cuda(fy);
+  realtype* tmp_d = N_VGetDeviceArrayPointer_Cuda(tmp);
+  fun_jtv_kernel<<<1,1>>>(v_d, Jv_d, t, y_d, fy_d, user_data, tmp_d);
   return 0;
 }
 
-
-__global__ void fun_jac_kernel(realtype tn, N_Vector y, N_Vector fy, SUNMatrix J,
-                               void *user_data, N_Vector tmp1, N_Vector tmp2, N_Vector tmp3)
+__global__ static void fun_rhs_kernel(realtype t, realtype* y, realtype* ydot,
+				      void *user_data)
 {
-  const int neqs = 3;
-  realtype* Jdata;
-  Jdata = SUNDenseMatrix_Data(J);
-  
-  Jdata[0] = -0.04e0;
-  Jdata[1] = 1.e4*NV_Ith_S(y, 2);
-  Jdata[2] = 1.e4*NV_Ith_S(y, 1);
+  ydot[0] = -.04e0*y[0] + 1.e4*y[1]*y[2];
+  ydot[2] = 3.e7*y[1]*y[1];
+  ydot[1] = -ydot[0]-ydot[2];
+}
 
-  Jdata[6] = 0.0e0;
-  Jdata[7] = 6.0e7*NV_Ith_S(y, 1);
-  Jdata[8] = 0.0e0;
-  
-  Jdata[3] = 0.04e0;
-  Jdata[4] = -Jdata[1]-Jdata[7];
-  Jdata[5] = -Jdata[2];
+
+__global__ static void fun_jtv_kernel(realtype* v, realtype* Jv, realtype t,
+				      realtype* y, realtype* fy,
+				      void* user_data, realtype* tmp)
+{
+  Jv[0] = -0.04e0*v[0] + 1.e4*y[2]*v[1] + 1.e4*y[1]*v[2];
+  Jv[2] = 6.0e7*y[1]*v[1];
+  Jv[1] = 0.04e0*v[0] + (-1.e4*y[2]-6.0e7*y[1])*v[1] + (-1.e4*y[1])*v[2];
 }

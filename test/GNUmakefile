@@ -10,6 +10,13 @@ COMP	   = gnu
 USE_MPI    = FALSE
 USE_OMP    = FALSE
 
+USE_CUDA   ?= FALSE
+USE_CUDA_CVODE ?= FALSE
+
+ifeq ($(USE_CUDA), TRUE)
+  USE_CUDA_CVODE := TRUE
+endif
+
 EBASE = main
 
 EXTERN_SEARCH += .

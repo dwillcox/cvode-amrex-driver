@@ -23,7 +23,9 @@ DEFINES += -DCRSEGRNDOMP
 # CVODE directories
 #------------------------------------------------------------------------------
 
-USE_CUDA_CVODE ?= FALSE
+ifeq ($(USE_CUDA_CVODE), TRUE)
+  DEFINES += -DCUDA_CVODE
+endif
 
 INCLUDE_LOCATIONS += $(CVODE_HOME)/include
 
