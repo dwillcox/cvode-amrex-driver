@@ -135,14 +135,6 @@ void main_main ()
 
     }
 
-
-    std::string name = "test.";
-    std::string integrator = "CVODE";
-
-    // Write a plotfile
-    WriteSingleLevelPlotfile(prefix + name + integrator, state, varnames, geom, time, 0);
-
-
     // Call the timer again and compute the maximum difference between
     // the start time and stop time over all processors
     Real stop_time = ParallelDescriptor::second() - strt_time;
@@ -150,6 +142,13 @@ void main_main ()
     ParallelDescriptor::ReduceRealMax(stop_time, IOProc);
 
     // Tell the I/O Processor to write out the "run time"
-    amrex::Print() << "Run time = " << stop_time << std::endl;
+    amrex::Print() << "Integration Run time = " << stop_time << std::endl;
+
+    std::string name = "test.";
+    std::string integrator = "CVODE";
+
+    // Write a plotfile
+    amrex::Print() << "Writing Plotfile" << std::endl;
+    WriteSingleLevelPlotfile(prefix + name + integrator, state, varnames, geom, time, 0);
 
 }
