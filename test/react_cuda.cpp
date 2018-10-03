@@ -18,66 +18,86 @@ void do_react(const int* lo, const int* hi,
   const int size_x = hi[0]-lo[0]+1;
   const int size_y = hi[1]-lo[1]+1;
   const int size_z = hi[2]-lo[2]+1;
+  const int size_state = size_x * size_y * size_z;
   const int neqs = 3;
+  const int size_flat = neqs * size_state;
 
-  realtype reltol=1.0e-4, time=0.0e0, tout, state_y[neqs];
-  realtype abstol_values[neqs] = {1.e-8, 1.e-14, 1.e-6};
-        
+  UserData user_data;
+  cudaMallocManaged(&user_data, sizeof(struct CVodeUserData));
+  user_data->num_cells = size_state;
+  user_data->num_eqs_per_cell = neqs;
+
+  realtype reltol=1.0e-4, time=0.0e0, tout;
+
+  realtype abstol_values[size_flat];
+  realtype state_y[size_flat];  
+
+  N_Vector y = NULL, yout=NULL;
+  N_Vector abstol = NULL;
+  SUNLinearSolver Linsol = NULL;
+  void* cvode_mem = NULL;
+  int flag;
+
+  // Create NVectors
+  y = N_VNew_Cuda(size_flat);
+  yout = N_VNew_Cuda(size_flat);
+  abstol = N_VNew_Cuda(size_flat);
+
+  // Initialize y, abstol from flattened state
+  int nzone = 0;
   for (int i=lo[0]; i<=hi[0]; i++) {
     for (int j=lo[1]; j<=hi[1]; j++) {
       for (int k=lo[2]; k<=hi[2]; k++) {
-
-        N_Vector y = NULL, yout=NULL;
-        N_Vector abstol = NULL;
-        SUNLinearSolver Linsol = NULL;
-        void* cvode_mem = NULL;
-        int flag;
-
-        // Create NVectors
-        y = N_VNew_Cuda(neqs);
-        yout = N_VNew_Cuda(neqs);
-        abstol = N_VNew_Cuda(neqs);
-
-        // Initialize y
         for (int n=1; n<=neqs; n++) {
-          get_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &state_y[n-1]);
+          get_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &state_y[nzone*neqs + n - 1]);
+	  if (n==1) abstol_values[nzone*neqs + n - 1] = 1.e-8;
+	  else if (n==2) abstol_values[nzone*neqs + n - 1] = 1.e-14;
+	  else abstol_values[nzone*neqs + n - 1] = 1.e-6;
         }
-        set_nvector_cuda(y, state_y, neqs);
-
-        // Initialize abstol
-        set_nvector_cuda(abstol, abstol_values, neqs);
-
-        // Initialize CVODE
-        cvode_mem = CVodeCreate(CV_BDF);
-        flag = CVodeInit(cvode_mem, fun_rhs, time, y);
-        flag = CVodeSVtolerances(cvode_mem, reltol, abstol);
-        flag = CVodeSetMaxNumSteps(cvode_mem, 150000);	
-
-        // Initialize Linear Solver
-        Linsol = SUNSPGMR(y, PREC_NONE, 0);
-        flag = CVSpilsSetLinearSolver(cvode_mem, Linsol);
-	flag = CVSpilsSetJacTimes(cvode_mem, NULL, fun_jac_times_vec);
-
-        // Do Integration
-        time = time + static_cast<realtype>(dt);
-        flag = CVode(cvode_mem, time, yout, &tout, CV_NORMAL);
-        if (flag != CV_SUCCESS) amrex::Abort("Failed integration");
-
-        // Save Final State
-        get_nvector_cuda(y, state_y, neqs);	
-        for (int n=1; n<=neqs; n++) {
-          set_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &state_y[n-1]);
-        }
-
-        // Free Memory
-        N_VDestroy(y);
-        N_VDestroy(yout);
-        N_VDestroy(abstol);
-        CVodeFree(&cvode_mem);
-        SUNLinSolFree(Linsol);
+	nzone++;
       }
     }
   }
+  set_nvector_cuda(y, state_y, size_flat);
+  set_nvector_cuda(abstol, abstol_values, size_flat);
+
+  // Initialize CVODE
+  cvode_mem = CVodeCreate(CV_BDF);
+  flag = CVodeSetUserData(cvode_mem, static_cast<void*>(user_data));
+  flag = CVodeInit(cvode_mem, fun_rhs, time, y);
+  flag = CVodeSVtolerances(cvode_mem, reltol, abstol);
+  flag = CVodeSetMaxNumSteps(cvode_mem, 150000);
+
+  // Initialize Linear Solver
+  Linsol = SUNSPGMR(y, PREC_NONE, 0);
+  flag = CVSpilsSetLinearSolver(cvode_mem, Linsol);
+  flag = CVSpilsSetJacTimes(cvode_mem, NULL, fun_jac_times_vec);
+
+  // Do Integration
+  time = time + static_cast<realtype>(dt);
+  flag = CVode(cvode_mem, time, yout, &tout, CV_NORMAL);
+  if (flag != CV_SUCCESS) amrex::Abort("Failed integration");
+
+  // Save Final State
+  get_nvector_cuda(yout, state_y, size_flat);
+  nzone = 0;
+  for (int i=lo[0]; i<=hi[0]; i++) {
+    for (int j=lo[1]; j<=hi[1]; j++) {
+      for (int k=lo[2]; k<=hi[2]; k++) {
+        for (int n=1; n<=neqs; n++) {
+          set_state(state, s_lo, s_hi, &ncomp, &i, &j, &k, &n, &state_y[nzone*neqs + n - 1]);
+        }
+	nzone++;
+      }
+    }
+  }
+
+  // Free Memory
+  N_VDestroy(y);
+  N_VDestroy(yout);
+  N_VDestroy(abstol);
+  CVodeFree(&cvode_mem);
+  SUNLinSolFree(Linsol);
 }
 
 
@@ -104,8 +124,11 @@ static void get_nvector_cuda(N_Vector vec, realtype* data, sunindextype size)
 static int fun_rhs(realtype t, N_Vector y, N_Vector ydot, void *user_data)
 {
   realtype* ydot_d = N_VGetDeviceArrayPointer_Cuda(ydot);
-  realtype* y_d = N_VGetDeviceArrayPointer_Cuda(y);  
-  fun_rhs_kernel<<<1,1>>>(t, y_d, ydot_d, user_data);
+  realtype* y_d = N_VGetDeviceArrayPointer_Cuda(y);
+  UserData udata = static_cast<CVodeUserData*>(user_data);
+  int numThreads = std::min(32, udata->num_cells);
+  int numBlocks = static_cast<int>(ceil(((double) udata->num_cells)/((double) numThreads)));
+  fun_rhs_kernel<<<numThreads,numBlocks>>>(t, y_d, ydot_d, user_data);
   return 0;
 }
 
@@ -119,16 +142,22 @@ static int fun_jac_times_vec(N_Vector v, N_Vector Jv, realtype t,
   realtype* y_d   = N_VGetDeviceArrayPointer_Cuda(y);
   realtype* fy_d  = N_VGetDeviceArrayPointer_Cuda(fy);
   realtype* tmp_d = N_VGetDeviceArrayPointer_Cuda(tmp);
-  fun_jtv_kernel<<<1,1>>>(v_d, Jv_d, t, y_d, fy_d, user_data, tmp_d);
+  UserData udata = static_cast<CVodeUserData*>(user_data);
+  int numThreads = std::min(32, udata->num_cells);
+  int numBlocks = static_cast<int>(ceil(((double) udata->num_cells)/((double) numThreads)));
+  fun_jtv_kernel<<<numThreads,numBlocks>>>(v_d, Jv_d, t, y_d, fy_d, user_data, tmp_d);
   return 0;
 }
 
 __global__ static void fun_rhs_kernel(realtype t, realtype* y, realtype* ydot,
 				      void *user_data)
 {
-  ydot[0] = -.04e0*y[0] + 1.e4*y[1]*y[2];
-  ydot[2] = 3.e7*y[1]*y[1];
-  ydot[1] = -ydot[0]-ydot[2];
+  UserData udata = static_cast<CVodeUserData*>(user_data);
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int offset = tid * udata->num_eqs_per_cell;
+  ydot[offset] = -.04e0*y[offset] + 1.e4*y[offset+1]*y[offset+2];
+  ydot[offset+2] = 3.e7*y[offset+1]*y[offset+1];
+  ydot[offset+1] = -ydot[offset]-ydot[offset+2];
 }
 
 
@@ -136,7 +165,10 @@ __global__ static void fun_jtv_kernel(realtype* v, realtype* Jv, realtype t,
 				      realtype* y, realtype* fy,
 				      void* user_data, realtype* tmp)
 {
-  Jv[0] = -0.04e0*v[0] + 1.e4*y[2]*v[1] + 1.e4*y[1]*v[2];
-  Jv[2] = 6.0e7*y[1]*v[1];
-  Jv[1] = 0.04e0*v[0] + (-1.e4*y[2]-6.0e7*y[1])*v[1] + (-1.e4*y[1])*v[2];
+  UserData udata = static_cast<CVodeUserData*>(user_data);
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int offset = tid * udata->num_eqs_per_cell;
+  Jv[offset] = -0.04e0*v[offset] + 1.e4*y[offset+2]*v[offset+1] + 1.e4*y[offset+1]*v[offset+2];
+  Jv[offset+2] = 6.0e7*y[offset+1]*v[offset+1];
+  Jv[offset+1] = 0.04e0*v[offset] + (-1.e4*y[offset+2]-6.0e7*y[offset+1])*v[offset+1] + (-1.e4*y[offset+1])*v[offset+2];
 }

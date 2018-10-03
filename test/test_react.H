@@ -9,6 +9,11 @@
 #include "sundials/sundials_types.h"         /* definition of realtype                   */
 #include "sundials/sundials_math.h"          /* contains the macros ABS, SUNSQR, and EXP */
 
+typedef struct CVodeUserData {
+  int num_cells;
+  int num_eqs_per_cell;
+}* UserData;
+
 void main_main();
 
 void do_react(const int* lo, const int* hi,
