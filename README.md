@@ -39,10 +39,10 @@ on the CPU and GPU, they are using different linear solvers, the
 linear systems are different (serialized vs flattened), and the
 relative tolerance for integration is 1.e-4.
 
-Timing for a 16**3 grid of cells:
-- 7.50 seconds for serial CVODE
-- 0.21 seconds for flattened CUDA CVODE
+Timing for a 32**3 grid of cells:
+- 57 seconds for serial CVODE
+- 0.83 seconds for flattened CUDA CVODE
 
-That's a speedup of about 36, which is pretty decent, especially for a
-grid as small as 16**3 like I tested with. The GPU could feasibly
-integrate many more zones simulataneously.
+That's a speedup of nearly 70, which is pretty decent for a grid this
+small, as the GPU can feasibly integrate many more zones than this
+simultaneously.
