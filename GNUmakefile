@@ -26,6 +26,6 @@ CVODE_HOME ?= ../CVODE
 Bpack   := ./Make.package
 Blocs   := .
 
-include ../Make.CVODE
+include Make.CVODE
 
 
